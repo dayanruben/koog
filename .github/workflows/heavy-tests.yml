@@ -23,6 +23,7 @@ env:
 
 jobs:
   integration-tests:
+    if: github.repository == 'JetBrains/koog'
     name: ${{ matrix.job-name }}
     runs-on: ${{ matrix.os }}
     permissions:
