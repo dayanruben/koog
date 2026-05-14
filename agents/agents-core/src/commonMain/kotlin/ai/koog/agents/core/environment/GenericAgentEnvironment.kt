@@ -1,6 +1,7 @@
 package ai.koog.agents.core.environment
 
-import ai.koog.agents.core.tools.Tool
+import ai.koog.agents.core.tools.ToolBase
+import ai.koog.agents.core.tools.ToolCallMetadata
 import ai.koog.agents.core.tools.ToolException
 import ai.koog.agents.core.tools.ToolRegistry
 import ai.koog.agents.core.tools.annotations.InternalAgentToolsApi
@@ -21,12 +22,18 @@ public class GenericAgentEnvironment(
     private val serializer: JSONSerializer,
 ) : AIAgentEnvironment {
 
-    override suspend fun executeTool(toolCall: Message.Tool.Call): ReceivedToolResult {
+    override suspend fun executeTool(toolCall: Message.Tool.Call): ReceivedToolResult =
+        executeTool(toolCall, ToolCallMetadata.EMPTY)
+
+    override suspend fun executeTool(
+        toolCall: Message.Tool.Call,
+        metadata: ToolCallMetadata,
+    ): ReceivedToolResult {
         logger.info {
             formatLog("Executing tool (name: ${toolCall.tool}, args: ${toolCall.contentJsonResult.getOrElse { "Failed to parse tool arguments: ${it.message}" }})")
         }
 
-        val environmentToolResult = processToolCall(toolCall)
+        val environmentToolResult = processToolCall(toolCall, metadata)
 
         logger.debug {
             formatLog("Received tool result (\ntool: ${toolCall.tool},\nresult: ${environmentToolResult.result},\ncontent: ${environmentToolResult.content}\n)")
@@ -43,7 +50,10 @@ public class GenericAgentEnvironment(
     }
 
     @OptIn(InternalAgentToolsApi::class)
-    private suspend fun processToolCall(toolCall: Message.Tool.Call): ReceivedToolResult {
+    private suspend fun processToolCall(
+        toolCall: Message.Tool.Call,
+        metadata: ToolCallMetadata,
+    ): ReceivedToolResult {
         logger.debug { "Handling tool call sent by server..." }
 
         // Tool
@@ -101,7 +111,7 @@ public class GenericAgentEnvironment(
 
         val toolResult = try {
             @Suppress("UNCHECKED_CAST")
-            (tool as Tool<Any?, Any?>).execute(toolArgs)
+            (tool as ToolBase<Any?, Any?>).execute(toolArgs, metadata)
         } catch (e: CancellationException) {
             throw e
         } catch (e: ToolException) {
