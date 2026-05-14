@@ -1,8 +1,6 @@
 import ai.koog.gradle.publish.maven.Publishing.publishToMaven
 import ai.koog.gradle.xcframework.XCFrameworkConfig.configureFrameworkExportsIfRequested
 
-group = rootProject.group
-version = rootProject.version
 
 plugins {
     id("ai.kotlin.multiplatform")
@@ -87,6 +85,7 @@ val included = setOf(
     ":prompt:prompt-executor:prompt-executor-clients:prompt-executor-openai-client-base",
     ":prompt:prompt-executor:prompt-executor-clients:prompt-executor-openrouter-client",
     ":prompt:prompt-executor:prompt-executor-clients:prompt-executor-dashscope-client",
+    ":prompt:prompt-executor:prompt-executor-clients:prompt-executor-litert-client",
     ":prompt:prompt-executor:prompt-executor-llms-all",
     ":prompt:prompt-executor:prompt-executor-model",
     ":prompt:prompt-llm",
@@ -102,6 +101,14 @@ val included = setOf(
     ":http-client:http-client-ktor",
     ":serialization:serialization-core",
     ":utils",
+)
+
+// Modules that do not publish a wasmJs artifact. They are filtered out of the
+// commonMain api auto-loop and declared on a local `nonWasmJsMain` intermediate
+// source set that all non-wasmJs leaf targets inherit from, so that the
+// koog-agents-wasm-js publication does not reference missing coordinates.
+val wasmJsExcluded = setOf(
+    ":agents:agents-features:agents-features-opentelemetry",
 )
 
 kotlin {
@@ -143,26 +150,46 @@ kotlin {
                     }
                 }
 
-                projects.forEach {
+                projects.filterNot { it.path in wasmJsExcluded }.forEach {
                     api(project(it.path))
                 }
             }
         }
 
-        androidMain.dependencies {
-            api(libs.ktor.client.okhttp)
+        // Source set holding dependencies that are valid on every target except wasmJs.
+        // 'jvmCommonMain', 'jsMain', and 'appleMain' pick these up.
+        // 'wasmJsMain' keeps its existing parent (nonJvmCommonMain, commonMain) and never sees them.
+        val nonWasmJsMain by creating {
+            dependsOn(commonMain.get())
+            dependencies {
+                wasmJsExcluded.forEach { api(project(it)) }
+            }
+        }
+
+        jvmCommonMain {
+            dependsOn(nonWasmJsMain)
         }
 
         jvmMain.dependencies {
             api(libs.ktor.client.apache5)
         }
 
-        appleMain.dependencies {
-            api(libs.ktor.client.darwin)
+        androidMain.dependencies {
+            api(libs.ktor.client.okhttp)
         }
 
-        jsMain.dependencies {
-            api(libs.ktor.client.js)
+        appleMain {
+            dependsOn(nonWasmJsMain)
+            dependencies {
+                api(libs.ktor.client.darwin)
+            }
+        }
+
+        jsMain {
+            dependsOn(nonWasmJsMain)
+            dependencies {
+                api(libs.ktor.client.js)
+            }
         }
 
         wasmJsMain.dependencies {
