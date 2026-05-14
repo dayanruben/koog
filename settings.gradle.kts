@@ -108,3 +108,5 @@ include(":docs")
 
 include(":test-utils")
 include(":utils")
+
+include(":agents:agents-planner")
